@@ -10,7 +10,7 @@ from pathlib import Path
 import json
 import inquirer
 import click
-import subprocess
+import shlex
 from . import cli
 from .config import pass_config
 from .config import Config
@@ -44,17 +44,26 @@ def transfer(config, filename, force_filename=None):
     destination = os.path.expanduser(config["destination"])
     if force_filename:
         destination = str(Path(destination).parent / force_filename)
-    source = f"{config['host']}:{config['path']}/{filename}"
+    remote_path = f"{config['path']}/{filename}"
+    source = f"{config['host']}:{remote_path}"
     click.secho(f"Copying {source} to {destination}", fg="yellow")
     sys.stdout.flush()
+
     started = datetime.now()
-    subprocess.run(
-        ["rsync", source, destination, "-arP", "--info=progress2"],
-        stdout=sys.stdout,
-        stderr=sys.stderr,
+    # -e "ssh -T": force no-TTY on ssh side.
+    # </dev/null: prevent the ssh stdio-forward used by ProxyJump from leaking
+    # protocol bytes (SSH banner) into the parent terminal's stdin, which would
+    # hang rsync and dump garbage into fish after Ctrl-C.
+    rc = os.system(
+        f'rsync -arP --info=progress2 -e "ssh -T" '
+        f"{shlex.quote(source)} {shlex.quote(destination)} "
+        f"< /dev/null"
     )
     seconds = (datetime.now() - started).total_seconds()
-    click.secho(f"Success - done in {seconds}s", fg="green")
+    if rc != 0:
+        click.secho(f"rsync failed with exit code {rc}", fg="red")
+        sys.exit(rc)
+    click.secho(f"Success - done in {seconds:.1f}s", fg="green")
 
 
 @cli.command(help="Choose specific file to download")
