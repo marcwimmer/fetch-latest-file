@@ -46,8 +46,13 @@ def transfer(config, filename, force_filename=None):
         destination = str(Path(destination).parent / force_filename)
     source = f"{config['host']}:{config['path']}/{filename}"
     click.secho(f"Copying {source} to {destination}", fg="yellow")
+    sys.stdout.flush()
     started = datetime.now()
-    subprocess.run(["rsync", source, destination, "-arP"])
+    subprocess.run(
+        ["rsync", source, destination, "-arP", "--info=progress2"],
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
     seconds = (datetime.now() - started).total_seconds()
     click.secho(f"Success - done in {seconds}s", fg="green")
 
@@ -66,7 +71,8 @@ def choose(config, source, all):
         if not answer:
             sys.exit(0)
         file = answer["file"]
-        transfer(config, file, force_filename=Path(answer['file']).name)
+        transfer(config, file, force_filename=Path(answer["file"]).name)
+
 
 def _generate_unique_filename(base_name, directory="."):
     """
@@ -79,14 +85,15 @@ def _generate_unique_filename(base_name, directory="."):
     counter = 1
     # Extract the file extension if it exists
     name, ext = os.path.splitext(base_name)
-    
+
     # Check for unique filename
     unique_name = base_name
-    while (directory / (unique_name  + ext)).exists():
+    while (directory / (unique_name + ext)).exists():
         unique_name = f"{name}_{counter}{ext}"
         counter += 1
-    
+
     return Path((directory / (unique_name + ext)))
+
 
 @cli.command()
 @click.argument("source", required=True)
@@ -99,16 +106,18 @@ def add(config, source, host, destination, match, path):
 
     configdir = Path(os.path.expanduser("~/.fetch_latest_file.d"))
     unique_file = _generate_unique_filename(source, configdir)
-    unique_file.write_text(f"""[{source}]
+    unique_file.write_text(
+        f"""[{source}]
 host = {host}
 path = {path}
 regex = {match}
 destination = {destination}
-    """)
+    """
+    )
 
     click.secho(f"Successfully added:", fg="green")
-    click.secho(f"\n{unique_file.absolute()}", fg='yellow')
-    click.secho(unique_file.read_text(), fg='yellow')
+    click.secho(f"\n{unique_file.absolute()}", fg="yellow")
+    click.secho(unique_file.read_text(), fg="yellow")
 
 
 @cli.command(name="all")
@@ -125,7 +134,7 @@ def fetch_all(config, dryrun, verbose):
             faileds.append((config.source, ex))
     if faileds:
         for failed in faileds:
-            click.secho(f"{failed[0]}: {str(failed[1])}", fg='red')
+            click.secho(f"{failed[0]}: {str(failed[1])}", fg="red")
         sys.exit(-1)
 
 
@@ -134,17 +143,27 @@ def fetch_all(config, dryrun, verbose):
 @click.argument("source", required=True, shell_complete=get_sources)
 @click.option("-n", "--dryrun", is_flag=True)
 @click.option("-v", "--verbose", is_flag=True)
-def cmd_fetch(config, source, dryrun, verbose):
+@click.option(
+    "-f",
+    "--filename",
+    required=False,
+    help="Explicit filename to fetch instead of latest match",
+)
+def cmd_fetch(config, source, dryrun, verbose, filename):
     config.source = source
-    _cmd_fetch(config, dryrun, verbose)
+    _cmd_fetch(config, dryrun, verbose, filename=filename)
 
-def _cmd_fetch(config, dryrun=False, verbose=False):
+
+def _cmd_fetch(config, dryrun=False, verbose=False, filename=None):
     with config.shell() as (config, shell):
-        files = list(_get_files(config, shell, verbose=verbose))
-        if not files:
-            click.secho("No files found.")
-            sys.exit(1)
-        file = files[-1]
+        if filename:
+            file = filename
+        else:
+            files = list(_get_files(config, shell, verbose=verbose))
+            if not files:
+                click.secho("No files found.")
+                sys.exit(1)
+            file = files[-1]
         if dryrun:
             click.secho(f"File {file} would be downloaded.", fg="green")
         else:

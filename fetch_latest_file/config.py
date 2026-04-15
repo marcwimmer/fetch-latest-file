@@ -13,6 +13,7 @@ import subprocess
 BASE_PATH = Path(os.path.expanduser("~/.fetch_latest_file.d"))
 SSH_CONFIG = Path(os.path.expanduser("~/.ssh/config"))
 
+
 class Config(object):
     def __init__(self):
         super().__init__()
@@ -20,7 +21,7 @@ class Config(object):
         self.source = None
         if BASE_PATH.exists():
             for file in BASE_PATH.glob("*"):
-                if file.name.startswith('.'):
+                if file.name.startswith("."):
                     continue
                 for section, config in self.parse_file(file):
                     self.sources[section] = config
@@ -41,10 +42,14 @@ class Config(object):
         config = self.get_source()
 
         def execute(cmd):
-            output = subprocess.check_output([
-                "ssh", config['host'],
-            ] + cmd)
-            output = output.decode('utf-8').split("\n")
+            output = subprocess.check_output(
+                [
+                    "ssh",
+                    config["host"],
+                ]
+                + cmd
+            )
+            output = output.decode("utf-8").split("\n")
             return output
 
         yield config, execute
@@ -62,8 +67,8 @@ class Config(object):
             "destination": destination,
         }
         if username:
-            config[self.source]['username'] = username
-        with open(path, 'w') as configfile:
+            config[self.source]["username"] = username
+        with open(path, "w") as configfile:
             config.write(configfile)
 
     def get_source(self):
@@ -72,10 +77,10 @@ class Config(object):
         return self.sources[self.source]
 
     def setup_logging(self):
-        FORMAT = '[%(levelname)s] %(asctime)s %(message)s'
+        FORMAT = "[%(levelname)s] %(asctime)s %(message)s"
         formatter = logging.Formatter(FORMAT)
         logging.basicConfig(format=FORMAT)
-        self.logger = logging.getLogger('')  # root handler
+        self.logger = logging.getLogger("")  # root handler
         self.logger.setLevel(self.log_level)
 
         stdout_handler = logging.StreamHandler(sys.stdout)
